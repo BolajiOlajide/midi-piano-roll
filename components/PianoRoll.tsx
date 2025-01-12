@@ -189,7 +189,7 @@ export default function PianoRoll({ subdivisions }: PianoRollProps) {
               <Note
                 note={currentNote}
                 totalKeys={TOTAL_KEYS}
-                onRemove={() => {}}
+                onRemove={() => removeNote(currentNote.id)}
                 isPreview
               />
             )}
