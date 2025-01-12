@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import * as Tone from 'tone';
 import { 
   TOTAL_KEYS, 
   NOTE_HEIGHT, 
@@ -8,10 +9,13 @@ import {
   MEASURES,
   isBlackKey, 
   getNoteNameFromIndex,
+  BPM,
+  TOTAL_TIME,
   type Note,
   type NoteColor,
   type GridSubdivision
 } from '../utils/pianoRollUtils';
+import { PlayButton } from './PlayButton';
 
 interface PianoRollProps {
   subdivisions: GridSubdivision;
@@ -22,11 +26,22 @@ export default function PianoRoll({ subdivisions }: PianoRollProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [currentNote, setCurrentNote] = useState<Note | null>(null);
   const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
+  const synthRef = useRef<Tone.PolySynth | null>(null);
 
   const totalWidth = MEASURE_WIDTH * MEASURES;
   const totalHeight = TOTAL_KEYS * NOTE_HEIGHT;
   const gridSize = MEASURE_WIDTH / subdivisions;
+
+  useEffect(() => {
+    synthRef.current = new Tone.PolySynth().toDestination();
+    return () => {
+      if (synthRef.current) {
+        synthRef.current.dispose();
+      }
+    };
+  }, []);
 
   const snapToGrid = (x: number) => {
     return Math.round(x / gridSize) * gridSize;
@@ -93,97 +108,130 @@ export default function PianoRoll({ subdivisions }: PianoRollProps) {
     }
   };
 
+  const togglePlayback = async () => {
+    if (isPlaying) {
+      Tone.Transport.stop();
+      Tone.Transport.cancel();
+      setIsPlaying(false);
+    } else {
+      await Tone.start();
+      Tone.Transport.bpm.value = BPM;
+
+      const now = Tone.now();
+      notes.forEach((note) => {
+        const pitch = getNoteNameFromIndex(note.key);
+        const startTime = now + (note.start / MEASURE_WIDTH) * TOTAL_TIME;
+        const duration = (note.duration / MEASURE_WIDTH) * TOTAL_TIME;
+        synthRef.current?.triggerAttackRelease(pitch, duration, startTime);
+      });
+
+      Tone.Transport.start();
+      setIsPlaying(true);
+
+      setTimeout(() => {
+        setIsPlaying(false);
+        Tone.Transport.stop();
+      }, TOTAL_TIME * 1000);
+    }
+  };
+
   return (
-    <div className="piano-roll select-none" style={{ display: 'flex', backgroundColor: '#1E1E1E' }}>
-      <div className="piano-keys" style={{ width: '60px' }}>
-        {[...Array(TOTAL_KEYS)].map((_, index) => {
-          const isBlack = isBlackKey(index);
-          return (
-            <div
-              key={index}
-              style={{
-                height: `${NOTE_HEIGHT}px`,
-                backgroundColor: isBlack ? '#1a1a1a' : '#ffffff',
-                borderBottom: '1px solid #333',
-                borderRight: '1px solid #333',
-                display: 'flex',
-                alignItems: 'center',
-                paddingLeft: '8px',
-                color: isBlack ? '#fff' : '#000',
-                fontSize: '12px',
-                fontFamily: 'monospace'
-              }}
-            >
-              {getNoteNameFromIndex(TOTAL_KEYS - 1 - index)}
-            </div>
-          );
-        })}
+    <div className="piano-roll select-none" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#1E1E1E' }}>
+      <div className="flex justify-between items-center p-2 bg-gray-800">
+        <h2 className="text-white text-lg font-semibold">Piano Roll</h2>
+        <PlayButton isPlaying={isPlaying} onClick={togglePlayback} />
       </div>
-      <svg 
-        ref={svgRef}
-        width={totalWidth} 
-        height={totalHeight} 
-        style={{ backgroundColor: '#2A2A2A' }}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => setHoverPosition(null)}
-        onMouseUp={finishNotePlacement}
-      >
-        <Grid totalWidth={totalWidth} totalHeight={totalHeight} subdivisions={subdivisions} />
-        <g>
-          {notes.map(note => (
-            <Note
-              key={note.id}
-              note={note}
-              totalKeys={TOTAL_KEYS}
-              onRemove={() => removeNote(note.id)}
-            />
-          ))}
-          {currentNote && (
-            <Note
-              note={currentNote}
-              totalKeys={TOTAL_KEYS}
-              onRemove={() => {}}
-              isPreview
-            />
-          )}
-        </g>
-        {hoverPosition && (
+      <div style={{ display: 'flex' }}>
+        <div className="piano-keys" style={{ width: '60px' }}>
+          {[...Array(TOTAL_KEYS)].map((_, index) => {
+            const isBlack = isBlackKey(index);
+            return (
+              <div
+                key={index}
+                style={{
+                  height: `${NOTE_HEIGHT}px`,
+                  backgroundColor: isBlack ? '#1a1a1a' : '#ffffff',
+                  borderBottom: '1px solid #333',
+                  borderRight: '1px solid #333',
+                  display: 'flex',
+                  alignItems: 'center',
+                  paddingLeft: '8px',
+                  color: isBlack ? '#fff' : '#000',
+                  fontSize: '12px',
+                  fontFamily: 'monospace'
+                }}
+              >
+                {getNoteNameFromIndex(TOTAL_KEYS - 1 - index)}
+              </div>
+            );
+          })}
+        </div>
+        <svg 
+          ref={svgRef}
+          width={totalWidth} 
+          height={totalHeight} 
+          style={{ backgroundColor: '#2A2A2A' }}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={() => setHoverPosition(null)}
+          onMouseUp={finishNotePlacement}
+        >
+          <Grid totalWidth={totalWidth} totalHeight={totalHeight} subdivisions={subdivisions} />
           <g>
-            <rect
-              x={hoverPosition.x}
-              y={hoverPosition.y}
-              width={gridSize}
-              height={NOTE_HEIGHT}
-              fill="rgba(255, 255, 255, 0.1)"
-              pointerEvents="none"
-            />
-            <line
-              x1={hoverPosition.x}
-              y1={0}
-              x2={hoverPosition.x}
-              y2={totalHeight}
-              stroke="rgba(255, 255, 255, 0.5)"
-              strokeWidth={1}
-              pointerEvents="none"
-            />
-            <line
-              x1={0}
-              y1={hoverPosition.y}
-              x2={totalWidth}
-              y2={hoverPosition.y}
-              stroke="rgba(255, 255, 255, 0.5)"
-              strokeWidth={1}
-              pointerEvents="none"
-            />
+            {notes.map(note => (
+              <Note
+                key={note.id}
+                note={note}
+                totalKeys={TOTAL_KEYS}
+                onRemove={() => removeNote(note.id)}
+              />
+            ))}
+            {currentNote && (
+              <Note
+                note={currentNote}
+                totalKeys={TOTAL_KEYS}
+                onRemove={() => {}}
+                isPreview
+              />
+            )}
           </g>
-        )}
-        <rect
-          width={totalWidth}
-          height={totalHeight}
-          fill="transparent"
-          onMouseDown={startNotePlacement}
-        />
-      </svg>
+          {hoverPosition && (
+            <g>
+              <rect
+                x={hoverPosition.x}
+                y={hoverPosition.y}
+                width={gridSize}
+                height={NOTE_HEIGHT}
+                fill="rgba(255, 255, 255, 0.1)"
+                pointerEvents="none"
+              />
+              <line
+                x1={hoverPosition.x}
+                y1={0}
+                x2={hoverPosition.x}
+                y2={totalHeight}
+                stroke="rgba(255, 255, 255, 0.5)"
+                strokeWidth={1}
+                pointerEvents="none"
+              />
+              <line
+                x1={0}
+                y1={hoverPosition.y}
+                x2={totalWidth}
+                y2={hoverPosition.y}
+                stroke="rgba(255, 255, 255, 0.5)"
+                strokeWidth={1}
+                pointerEvents="none"
+              />
+            </g>
+          )}
+          <rect
+            width={totalWidth}
+            height={totalHeight}
+            fill="transparent"
+            onMouseDown={startNotePlacement}
+          />
+        </svg>
+      </div>
     </div>
   );
 }
@@ -240,6 +288,14 @@ function Note({ note, totalKeys, onRemove, isPreview = false }: NoteProps) {
     pink: { fill: '#FFB6C1', stroke: '#FF69B4' }
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    console.log('Note clicked', note, isPreview);
+    e.stopPropagation();
+    if (!isPreview) {
+      onRemove();
+    }
+  };
+
   return (
     <g>
       <rect
@@ -253,10 +309,14 @@ function Note({ note, totalKeys, onRemove, isPreview = false }: NoteProps) {
         opacity={isPreview ? 0.6 : 1}
         rx={2}
         ry={2}
-        onClick={(e) => {
-          if (!isPreview) {
-            e.stopPropagation();
-            onRemove();
+        onClick={handleClick}
+        style={{ cursor: isPreview ? 'default' : 'pointer' }}
+        role="button"
+        aria-label={`Delete note ${getNoteNameFromIndex(note.key)}`}
+        tabIndex={isPreview ? -1 : 0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            handleClick(e as unknown as React.MouseEvent);
           }
         }}
       />

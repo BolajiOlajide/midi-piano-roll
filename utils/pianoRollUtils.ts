@@ -1,14 +1,13 @@
-// Constants for the piano roll
-export const START_OCTAVE = 2; // C2
-export const END_OCTAVE = 4;  // C4
+export const START_OCTAVE = 1; // C1
+export const END_OCTAVE = 3; // C3
 export const OCTAVE_KEYS = 12;
 export const NOTE_HEIGHT = 30;
 export const MEASURE_WIDTH = 160;
 export const MEASURES = 4;
+export const SUBDIVISIONS = 16;
 
 export type GridSubdivision = 16 | 8 | 4 | 2 | 1;
 
-// Update SUBDIVISIONS to be dynamic
 export const GRID_OPTIONS = [
   { value: "16", label: "1/16" },
   { value: "8", label: "1/8" },
@@ -17,7 +16,6 @@ export const GRID_OPTIONS = [
   { value: "1", label: "1" },
 ] as const;
 
-// Calculate total keys from C2 to C4 (25 keys)
 export const TOTAL_KEYS = (END_OCTAVE - START_OCTAVE) * OCTAVE_KEYS + 1;
 
 export const isBlackKey = (index: number) => {
@@ -42,3 +40,7 @@ export interface Note {
   color: NoteColor;
 }
 
+// New constants for Tone.js
+export const BPM = 120;
+export const SECONDS_PER_MEASURE = 4;
+export const TOTAL_TIME = MEASURES * SECONDS_PER_MEASURE;
